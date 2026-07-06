@@ -18,6 +18,9 @@ export default function App() {
     const [error, setError] = useState('');
     const [tab, setTab] = useState('tekst');
     const [drawer, setDrawer] = useState(false);
+    const [page, setPage] = useState('makers');
+    const [overview, setOverview] = useState(null);
+    const [loadingOverview, setLoadingOverview] = useState(false);
 
     const t = UI[lang];
 
@@ -46,6 +49,13 @@ export default function App() {
 
     useEffect(() => { loadDetail(selectedId); }, [selectedId, loadDetail]);
 
+    const loadOverview = useCallback(async () => {
+        setLoadingOverview(true);
+        try { const d = await api.overview(); setOverview(d.makers || []); } catch (e) { setError(e.message || 'Laden mislukt'); } finally { setLoadingOverview(false); }
+    }, []);
+
+    useEffect(() => { if (loggedIn && page === 'overview' && overview === null) loadOverview(); }, [loggedIn, page, overview, loadOverview]);
+
     const handleLogin = async (name, pincode) => {
         setError('');
         try {
@@ -61,7 +71,7 @@ export default function App() {
 
     const handleLogout = () => {
         clearStoredPincode();
-        setLoggedIn(false); setProgrammer(null); setMakers([]); setSelectedId(null); setDetail(null);
+        setLoggedIn(false); setProgrammer(null); setMakers([]); setSelectedId(null); setDetail(null); setOverview(null); setPage('makers');
     };
 
     const selectMaker = (id) => { setSelectedId(id); setTab('tekst'); setDrawer(false); };
@@ -83,7 +93,15 @@ export default function App() {
             {loading ? (
                 <div className="text-center text-gray-500 py-12">{t.loading}</div>
             ) : !selectedId ? (
-                <MakerOverview makers={makers} onSelect={selectMaker} t={t} />
+                <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6">
+                    <div className="flex rounded-lg bg-white border shadow-sm overflow-hidden mb-5">
+                        <button onClick={() => setPage('makers')} className={`flex-1 px-4 py-2.5 text-sm font-medium ${page === 'makers' ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t.page_makers}</button>
+                        <button onClick={() => setPage('overview')} className={`flex-1 px-4 py-2.5 text-sm font-medium ${page === 'overview' ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t.page_overview}</button>
+                    </div>
+                    {page === 'makers'
+                        ? <MakerOverview makers={makers} onSelect={selectMaker} t={t} />
+                        : <RehearsalOverview items={overview} loading={loadingOverview} onSelect={selectMaker} onReload={loadOverview} lang={lang} t={t} />}
+                </main>
             ) : (
                 <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-5">
                     <div className="flex items-center gap-3 mb-4">
@@ -129,7 +147,7 @@ export default function App() {
 
 function MakerOverview({ makers, onSelect, t }) {
     return (
-        <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6">
+        <div>
             <h2 className="text-lg font-bold text-gray-800 mb-1">{t.your_makers}</h2>
             <p className="text-sm text-gray-500 mb-4">{t.pick_maker}</p>
             {makers.length === 0 ? (
@@ -144,7 +162,90 @@ function MakerOverview({ makers, onSelect, t }) {
                     ))}
                 </div>
             )}
-        </main>
+        </div>
+    );
+}
+
+function RehearsalOverview({ items, loading, onSelect, onReload, lang, t }) {
+    if (loading || items === null) return <div className="text-center text-gray-400 py-10">{t.loading}</div>;
+    if (items.length === 0) return <EmptyState text={t.no_makers} />;
+
+    // Sorteer: makers die aandacht nodig hebben (niets ingevoerd, of niet gedeeld) bovenaan.
+    const rank = (m) => (!m.has_rehearsals ? 0 : !m.released ? 1 : 2);
+    const sorted = [...items].sort((a, b) => rank(a) - rank(b) || (a.title || '').localeCompare(b.title || ''));
+
+    const needAttention = sorted.filter(m => rank(m) < 2).length;
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-lg font-bold text-gray-800">{t.overview_title}</h2>
+                    <p className="text-sm text-gray-500">{needAttention > 0 ? t.overview_attention.replace('{n}', needAttention) : t.overview_all_done}</p>
+                </div>
+                <button onClick={onReload} className="text-sm text-ctf-primary hover:underline whitespace-nowrap">↻ {t.overview_refresh}</button>
+            </div>
+
+            <div className="space-y-3">
+                {sorted.map(m => <OverviewCard key={m.performance_id} m={m} onSelect={onSelect} lang={lang} t={t} />)}
+            </div>
+        </div>
+    );
+}
+
+function OverviewCard({ m, onSelect, lang, t }) {
+    // Status van de maker: niets ingevoerd → ingevoerd-maar-niet-gedeeld → gedeeld.
+    let badge, badgeClass;
+    if (!m.has_rehearsals) { badge = t.st_none; badgeClass = 'text-gray-600 bg-gray-100'; }
+    else if (!m.released) { badge = t.st_entered_not_shared; badgeClass = 'text-amber-700 bg-amber-50'; }
+    else { badge = t.st_shared; badgeClass = 'text-green-700 bg-green-50'; }
+
+    const pendingProposals = (m.proposals || []).filter(p => p.status === 'pending').length;
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm p-4">
+            <div className="flex items-start justify-between gap-3">
+                <button onClick={() => onSelect(m.performance_id)} className="text-left min-w-0">
+                    <div className="font-semibold hover:text-ctf-primary">{m.title}</div>
+                    {m.company && <div className="text-sm text-gray-500">{m.company}</div>}
+                </button>
+                <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${badgeClass}`}>{badge}</span>
+            </div>
+
+            {/* Ingeplande (vrijgegeven) repetities */}
+            {m.released && m.rehearsals?.length > 0 && (
+                <div className="mt-3 border-t pt-3 space-y-1">
+                    {m.rehearsals.map(r => (
+                        <div key={r.id} className="text-sm text-gray-700 flex items-center gap-2">
+                            <span className="text-gray-400">•</span>
+                            <span>{fmtDT(r.starts_at, lang)}{r.ends_at ? ` – ${fmtTime(r.ends_at, lang)}` : ''}</span>
+                            {r.in_cafe && <span className="text-amber-700 text-xs">🏠 {t.in_cafe}</span>}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Bezoekvoorstellen met status */}
+            {m.proposals?.length > 0 && (
+                <div className="mt-3 border-t pt-3 space-y-1">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t.proposals_title}</div>
+                    {m.proposals.map(p => {
+                        const cls = p.status === 'accepted' ? 'text-green-700 bg-green-50' : p.status === 'rejected' ? 'text-red-700 bg-red-50' : 'text-amber-700 bg-amber-50';
+                        const lbl = p.status === 'accepted' ? t.status_accepted : p.status === 'rejected' ? t.status_rejected : t.status_pending;
+                        return (
+                            <div key={p.id} className="text-sm flex items-center justify-between gap-2">
+                                <span className="text-gray-700 min-w-0 truncate">{fmtDT(p.starts_at, lang)}{p.ends_at ? ` – ${fmtTime(p.ends_at, lang)}` : ''}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>{lbl}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {pendingProposals === 0 && m.released && (m.rehearsals?.length > 0) && (
+                <button onClick={() => onSelect(m.performance_id)} className="mt-3 text-sm text-ctf-primary hover:underline">{t.overview_propose} →</button>
+            )}
+        </div>
     );
 }
 

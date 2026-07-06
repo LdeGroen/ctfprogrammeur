@@ -39,6 +39,7 @@ export const api = {
         body: JSON.stringify({ name, pincode }),
     }),
     bundle: () => request('/api/programmer/public/bundle'),
+    overview: () => request('/api/programmer/public/overview'),
     maker: (performanceId) => request(`/api/programmer/public/maker/${performanceId}`),
     saveTekst: (performanceId, programmeurstekst) => request(`/api/programmer/public/maker/${performanceId}/tekst`, {
         method: 'PUT',

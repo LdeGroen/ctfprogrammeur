@@ -21,10 +21,24 @@ export default function App() {
     const [page, setPage] = useState('makers');
     const [overview, setOverview] = useState(null);
     const [loadingOverview, setLoadingOverview] = useState(false);
+    const [calendarMsg, setCalendarMsg] = useState(null);
 
     const t = UI[lang];
 
     useEffect(() => { localStorage.setItem('ctfprogrammeur_lang', lang); }, [lang]);
+
+    // Terugkeer van de Google OAuth-flow: toon resultaat, ga naar het overzicht en
+    // maak de URL weer schoon.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const c = params.get('calendar');
+        if (!c) return;
+        setCalendarMsg(c);
+        if (c === 'connected') setPage('overview');
+        window.history.replaceState({}, '', window.location.pathname);
+        const id = setTimeout(() => setCalendarMsg(null), 6000);
+        return () => clearTimeout(id);
+    }, []);
 
     const loadBundle = useCallback(async () => {
         setLoading(true); setError('');
@@ -89,6 +103,13 @@ export default function App() {
             <NotificationToggle vapidPublicKey={vapid} lang={lang} t={t} />
 
             {error && <div className="max-w-4xl mx-auto m-4 p-4 bg-red-50 text-red-700 rounded w-full">{error}</div>}
+            {calendarMsg && (
+                <div className={`max-w-4xl mx-auto mt-4 px-4 w-full`}>
+                    <div className={`p-3 rounded-lg text-sm ${calendarMsg === 'connected' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
+                        {calendarMsg === 'connected' ? t.cal_connected_msg : calendarMsg === 'denied' ? t.cal_denied_msg : t.cal_error_msg}
+                    </div>
+                </div>
+            )}
 
             {loading ? (
                 <div className="text-center text-gray-500 py-12">{t.loading}</div>
@@ -100,7 +121,10 @@ export default function App() {
                     </div>
                     {page === 'makers'
                         ? <MakerOverview makers={makers} onSelect={selectMaker} t={t} />
-                        : <RehearsalOverview items={overview} loading={loadingOverview} onSelect={selectMaker} onReload={loadOverview} lang={lang} t={t} />}
+                        : <div className="space-y-4">
+                            <CalendarPanel lang={lang} t={t} />
+                            <RehearsalOverview items={overview} loading={loadingOverview} onSelect={selectMaker} onReload={loadOverview} lang={lang} t={t} />
+                          </div>}
                 </main>
             ) : (
                 <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-5">
@@ -134,6 +158,18 @@ export default function App() {
                         <div className="p-4 border-b flex items-center justify-between">
                             <span className="font-semibold">{t.your_makers}</span>
                             <button onClick={() => setDrawer(false)} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
+                        </div>
+                        <div className="p-2 border-b">
+                            <button onClick={() => { setSelectedId(null); setPage('overview'); setDrawer(false); }}
+                                className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-50 text-gray-700 flex items-center gap-2">
+                                <span className="text-ctf-primary">📋</span>
+                                <span className="font-medium text-sm">{t.page_overview}</span>
+                            </button>
+                            <button onClick={() => { setSelectedId(null); setPage('makers'); setDrawer(false); }}
+                                className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-50 text-gray-700 flex items-center gap-2">
+                                <span className="text-ctf-primary">🎭</span>
+                                <span className="font-medium text-sm">{t.page_makers}</span>
+                            </button>
                         </div>
                         <MakerList makers={makers} selectedId={selectedId} onSelect={selectMaker} t={t} />
                     </aside>
@@ -189,6 +225,79 @@ function RehearsalOverview({ items, loading, onSelect, onReload, lang, t }) {
             <div className="space-y-3">
                 {sorted.map(m => <OverviewCard key={m.performance_id} m={m} onSelect={onSelect} lang={lang} t={t} />)}
             </div>
+        </div>
+    );
+}
+
+function CalendarPanel({ lang, t }) {
+    const [status, setStatus] = useState(null);
+    const [busy, setBusy] = useState('');
+
+    const load = useCallback(async () => {
+        try { setStatus(await api.calendarStatus()); } catch { setStatus({ connected: false }); }
+    }, []);
+    useEffect(() => { load(); }, [load]);
+
+    const connect = async () => {
+        setBusy('connect');
+        try { const { url } = await api.calendarConnect(); window.location.href = url; }
+        catch { setBusy(''); }
+    };
+    const sync = async () => {
+        setBusy('sync');
+        try { const r = await api.calendarSync(); setStatus(s => ({ ...s, synced_at: r.synced_at })); }
+        catch (e) { alert(t.cal_sync_failed + (e.message ? `: ${e.message}` : '')); }
+        finally { setBusy(''); }
+    };
+    const toggleAuto = async () => {
+        const next = !status.sync;
+        setStatus(s => ({ ...s, sync: next }));
+        try { await api.calendarAutoSync(next); } catch { setStatus(s => ({ ...s, sync: !next })); }
+    };
+    const disconnect = async () => {
+        if (!window.confirm(t.cal_disconnect_confirm)) return;
+        setBusy('disconnect');
+        try { await api.calendarDisconnect(); setStatus({ connected: false }); } catch {} finally { setBusy(''); }
+    };
+
+    if (status === null) return null;
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-ctf-primary">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="font-semibold flex items-center gap-2">📅 {t.cal_title}</div>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                        {status.connected
+                            ? <>{t.cal_connected_as} <span className="font-medium">{status.email || 'Google'}</span></>
+                            : t.cal_intro}
+                    </p>
+                </div>
+                {!status.connected ? (
+                    <button onClick={connect} disabled={busy === 'connect'}
+                        className="whitespace-nowrap bg-ctf-primary text-white text-sm px-4 py-2 rounded font-medium hover:bg-ctf-primary/90 disabled:opacity-50">
+                        {busy === 'connect' ? t.loading : t.cal_connect}
+                    </button>
+                ) : (
+                    <button onClick={sync} disabled={busy === 'sync'}
+                        className="whitespace-nowrap bg-ctf-primary text-white text-sm px-4 py-2 rounded font-medium hover:bg-ctf-primary/90 disabled:opacity-50">
+                        {busy === 'sync' ? t.cal_syncing : `↻ ${t.cal_sync_now}`}
+                    </button>
+                )}
+            </div>
+
+            {status.connected && (
+                <div className="mt-3 pt-3 border-t flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" checked={!!status.sync} onChange={toggleAuto} className="h-4 w-4" />
+                        <span>{t.cal_auto}</span>
+                    </label>
+                    <div className="flex items-center gap-4 text-xs text-gray-400">
+                        {status.synced_at && <span>{t.cal_last_sync}: {fmtDT(status.synced_at, lang)}</span>}
+                        <button onClick={disconnect} disabled={busy === 'disconnect'} className="text-red-500 hover:text-red-700">{t.cal_disconnect}</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -50,4 +50,10 @@ export const api = {
         body: JSON.stringify(data),
     }),
     deleteProposal: (id) => request(`/api/programmer/public/proposals/${id}`, { method: 'DELETE' }),
+    // Google Agenda-koppeling.
+    calendarStatus: () => request('/api/programmer/public/calendar/status'),
+    calendarConnect: () => request(`/api/programmer/public/calendar/connect?return_to=${encodeURIComponent(window.location.origin + window.location.pathname)}`),
+    calendarSync: () => request('/api/programmer/public/calendar/sync', { method: 'POST' }),
+    calendarAutoSync: (enabled) => request('/api/programmer/public/calendar/auto-sync', { method: 'POST', body: JSON.stringify({ enabled }) }),
+    calendarDisconnect: () => request('/api/programmer/public/calendar/disconnect', { method: 'POST' }),
 };

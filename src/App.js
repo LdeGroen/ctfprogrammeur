@@ -422,7 +422,7 @@ function LoginScreen({ onLogin, lang, setLang, error }) {
 
     const submit = async (e) => {
         e.preventDefault();
-        if (!name.trim() || pin.length < 4) return;
+        if (!name.trim() || pin.length < 6) return;
         setBusy(true);
         try { await onLogin(name.trim(), pin); } catch {} finally { setBusy(false); }
     };
@@ -437,11 +437,11 @@ function LoginScreen({ onLogin, lang, setLang, error }) {
                 <form onSubmit={submit} className="space-y-3">
                     <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={t.name}
                            className="w-full border rounded p-3 focus:outline-none focus:ring-2 focus:ring-ctf-primary/40" autoFocus />
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={4} value={pin}
-                           onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder={t.pincode}
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={pin}
+                           onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder={t.pincode}
                            className="w-full border rounded p-3 text-center text-2xl tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-ctf-primary/40" />
                     {error && <p className="text-sm text-red-600">{error}</p>}
-                    <button type="submit" disabled={busy || !name.trim() || pin.length < 4}
+                    <button type="submit" disabled={busy || !name.trim() || pin.length < 6}
                             className="w-full bg-ctf-primary text-white py-2.5 rounded font-medium hover:bg-ctf-primary/90 disabled:opacity-50">{t.login}</button>
                 </form>
             </div>

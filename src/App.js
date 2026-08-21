@@ -191,11 +191,64 @@ function MakerOverview({ makers, onSelect, t }) {
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {makers.map(m => (
-                        <button key={m.performance_id} onClick={() => onSelect(m.performance_id)} className="text-left bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition">
-                            <div className="font-semibold">{m.title}</div>
-                            {m.company && <div className="text-sm text-gray-500 mt-0.5">{m.company}</div>}
-                        </button>
+                        <MakerKaart key={m.performance_id} maker={m} onSelect={onSelect} t={t} />
                     ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/**
+ * Eén maker in de lijst, met zijn pincode erbij.
+ *
+ * De coach kan de code doorgeven aan een gezelschap dat hem kwijt is. Hij staat
+ * standaard verborgen: een coach die zijn scherm deelt of naast iemand zit hoeft
+ * niet de codes van al zijn makers te laten zien.
+ *
+ * De kaart is bewust geen <button> meer — er zitten nu knoppen ín, en die kun je
+ * niet in een knop nesten.
+ */
+function MakerKaart({ maker, onSelect, t }) {
+    const [zichtbaar, setZichtbaar] = useState(false);
+    const [gekopieerd, setGekopieerd] = useState(false);
+
+    const kopieer = async () => {
+        try {
+            await navigator.clipboard.writeText(maker.pincode);
+            setGekopieerd(true);
+            setTimeout(() => setGekopieerd(false), 1500);
+        } catch {
+            // Zonder klembordrechten: dan maar tonen en overtypen.
+            setZichtbaar(true);
+        }
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition">
+            <button onClick={() => onSelect(maker.performance_id)} className="w-full text-left p-4 pb-2">
+                <div className="font-semibold">{maker.title}</div>
+                {maker.company && <div className="text-sm text-gray-500 mt-0.5">{maker.company}</div>}
+            </button>
+
+            {maker.pincode && (
+                <div className="px-4 pb-3 pt-1 border-t border-gray-100">
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-500">{t.maker_pincode}:</span>
+                        <span className="font-mono tracking-widest">
+                            {zichtbaar ? maker.pincode : '••••••'}
+                        </span>
+                        <button
+                            onClick={() => setZichtbaar(v => !v)}
+                            className="text-ctf-primary underline text-xs"
+                        >
+                            {zichtbaar ? t.pincode_verbergen : t.pincode_tonen}
+                        </button>
+                        <button onClick={kopieer} className="text-ctf-primary underline text-xs">
+                            {gekopieerd ? t.pincode_gekopieerd : t.pincode_kopieren}
+                        </button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">{t.pincode_uitleg}</p>
                 </div>
             )}
         </div>

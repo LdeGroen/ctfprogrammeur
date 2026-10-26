@@ -22,6 +22,9 @@ export default function App() {
     const [overview, setOverview] = useState(null);
     const [loadingOverview, setLoadingOverview] = useState(false);
     const [calendarMsg, setCalendarMsg] = useState(null);
+    // Per festivaljaar (26-10-2026): je ziet de makers van het nieuwste jaar,
+    // de vorige jaren staan onder hun eigen tabje. null = het nieuwste.
+    const [jaar, setJaar] = useState(null);
 
     const t = UI[lang];
 
@@ -96,6 +99,13 @@ export default function App() {
 
     const selectedMaker = makers.find(m => String(m.performance_id) === String(selectedId));
 
+    // Jaren met makers, nieuwste eerst; makers zonder jaar achteraan.
+    const jaren = [...new Set(makers.map(m => m.jaar ?? ZONDER_JAAR))]
+        .sort((a, b) => (a === ZONDER_JAAR) - (b === ZONDER_JAAR) || b - a);
+    const actiefJaar = jaren.includes(jaar) ? jaar : jaren[0];
+    const vanJaar = (m) => (m.jaar ?? ZONDER_JAAR) === actiefJaar;
+    const jaarMakers = makers.filter(vanJaar);
+
     return (
         <div className="min-h-screen flex flex-col">
             <Header lang={lang} setLang={setLang} onLogout={handleLogout} t={t} name={programmer?.name} />
@@ -119,11 +129,12 @@ export default function App() {
                         <button onClick={() => setPage('makers')} className={`flex-1 px-4 py-2.5 text-sm font-medium ${page === 'makers' ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t.page_makers}</button>
                         <button onClick={() => setPage('overview')} className={`flex-1 px-4 py-2.5 text-sm font-medium ${page === 'overview' ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t.page_overview}</button>
                     </div>
+                    <JaarTabs jaren={jaren} actief={actiefJaar} onKies={setJaar} t={t} />
                     {page === 'makers'
-                        ? <MakerOverview makers={makers} onSelect={selectMaker} t={t} />
+                        ? <MakerOverview makers={jaarMakers} onSelect={selectMaker} t={t} />
                         : <div className="space-y-4">
                             <CalendarPanel lang={lang} t={t} />
-                            <RehearsalOverview items={overview} loading={loadingOverview} onSelect={selectMaker} onReload={loadOverview} lang={lang} t={t} />
+                            <RehearsalOverview items={overview && overview.filter(vanJaar)} loading={loadingOverview} onSelect={selectMaker} onReload={loadOverview} lang={lang} t={t} />
                           </div>}
                 </main>
             ) : (
@@ -171,12 +182,36 @@ export default function App() {
                                 <span className="font-medium text-sm">{t.page_makers}</span>
                             </button>
                         </div>
-                        <MakerList makers={makers} selectedId={selectedId} onSelect={selectMaker} t={t} />
+                        {jaren.length > 1 && (
+                            <div className="px-2 pt-2"><JaarTabs jaren={jaren} actief={actiefJaar} onKies={setJaar} t={t} /></div>
+                        )}
+                        <MakerList makers={jaarMakers} selectedId={selectedId} onSelect={selectMaker} t={t} />
                     </aside>
                 </div>
             )}
 
             <footer className="text-center text-xs text-gray-400 py-6">© Café Theater Festival</footer>
+        </div>
+    );
+}
+
+const ZONDER_JAAR = 'zonder';
+
+/**
+ * Tabjes per festivaljaar. Alleen als er meer dan één jaar is: met één jaar
+ * is er niets te kiezen.
+ */
+function JaarTabs({ jaren, actief, onKies, t }) {
+    if (jaren.length < 2) return null;
+
+    return (
+        <div className="flex gap-1 mb-4 overflow-x-auto">
+            {jaren.map(j => (
+                <button key={j} onClick={() => onKies(j)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border ${j === actief ? 'bg-ctf-primary text-white border-transparent' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {j === ZONDER_JAAR ? t.year_none : j}
+                </button>
+            ))}
         </div>
     );
 }

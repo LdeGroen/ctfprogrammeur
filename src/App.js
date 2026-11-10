@@ -135,7 +135,7 @@ export default function App() {
                     {page === 'makers'
                         ? <MakerOverview makers={jaarMakers} onSelect={selectMaker} t={t} />
                         : page === 'agenda'
-                        ? <Agenda items={overview && overview.filter(vanJaar)} loading={loadingOverview} onReload={loadOverview}
+                        ? <Agenda items={overview && overview.filter(vanJaar)} loading={loadingOverview} onReload={loadOverview} alleenMeelopen={!!programmer?.alleen_meelopen}
                             onOpenMaker={(id) => { selectMaker(id); setTab('repetities'); }} lang={lang} t={t} />
                         : <div className="space-y-4">
                             <CalendarPanel lang={lang} t={t} />
@@ -436,12 +436,16 @@ function OverviewCard({ m, onSelect, lang, t }) {
                 <div className="mt-3 border-t pt-3 space-y-1">
                     <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t.proposals_title}</div>
                     {bezoeken.map(p => (
-                        <div key={p.id} className="text-sm text-gray-700 truncate">{fmtDT(p.starts_at, lang)}{p.ends_at ? ` – ${fmtTime(p.ends_at, lang)}` : ''}</div>
+                        <div key={p.id} className="text-sm text-gray-700 truncate">
+                            {m.rol === 'mee' && (p.ik_mee ? '✓ ' : '')}{fmtDT(p.starts_at, lang)}{p.ends_at ? ` – ${fmtTime(p.ends_at, lang)}` : ''}
+                            {m.rol === 'mee' && p.programmer && <span className="text-gray-400"> · {p.programmer}</span>}
+                            {m.rol !== 'mee' && p.meelopers?.length > 0 && <span className="text-green-700"> · + {p.meelopers.join(', ')}</span>}
+                        </div>
                     ))}
                 </div>
             )}
 
-            {bezoeken.length === 0 && (m.rehearsals?.length > 0) && (
+            {m.rol !== 'mee' && bezoeken.length === 0 && (m.rehearsals?.length > 0) && (
                 <button onClick={() => onSelect(m.performance_id)} className="mt-3 text-sm text-ctf-primary hover:underline">{t.overview_propose} →</button>
             )}
         </div>
@@ -573,6 +577,45 @@ function fmtTime(iso, lang) {
 }
 
 function RepetitiesTab({ detail, performanceId, reload, lang, t }) {
+    if (detail.rol === 'mee') return <MeeloopTab detail={detail} reload={reload} lang={lang} t={t} />;
+    return <HoofdRepetitiesTab detail={detail} performanceId={performanceId} reload={reload} lang={lang} t={t} />;
+}
+
+// Meeloopcoach (10-11-2026): geen eigen bezoeken, wel meegaan met die van de
+// hoofdbegeleider. Alleen naar een repetitie gaan doet een meeloopcoach nooit.
+function MeeloopTab({ detail, reload, lang, t }) {
+    const [bezig, setBezig] = useState(null);
+    const bezoeken = (detail.proposals || []).filter(p => p.status !== 'rejected');
+    const zet = async (id, mee) => {
+        setBezig(id);
+        try { await api.meelopen(id, mee); reload?.(); } catch (e) { alert(e.message || t.ag_mislukt); } finally { setBezig(null); }
+    };
+    return (
+        <section className="space-y-3">
+            <p className="text-sm text-gray-600">{t.ag_mee_uitleg}</p>
+            {bezoeken.length === 0 ? <EmptyState text={t.ag_mee_geen} /> : (
+                <div className="bg-white rounded-xl shadow-sm divide-y">
+                    {bezoeken.map(p => (
+                        <div key={p.id} className="p-4 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <div className="font-semibold">{fmtDT(p.starts_at, lang)}{p.ends_at ? ` – ${fmtTime(p.ends_at, lang)}` : ''}</div>
+                                <div className="text-sm text-gray-500">{t.ag_bezoek_van.replace('{naam}', p.programmer || t.ag_begeleider)}</div>
+                                {p.note && <div className="text-sm text-gray-500">{p.note}</div>}
+                            </div>
+                            {p.ik_mee ? (
+                                <button onClick={() => zet(p.id, false)} disabled={bezig === p.id} className="text-sm text-green-700 bg-green-50 px-3 py-1.5 rounded-lg whitespace-nowrap disabled:opacity-50" title={t.ag_toch_niet_mee}>✓ {t.ag_jij_gaat_mee}</button>
+                            ) : (
+                                <button onClick={() => zet(p.id, true)} disabled={bezig === p.id} className="text-sm bg-ctf-primary text-white px-3 py-1.5 rounded-lg whitespace-nowrap disabled:opacity-50">{t.ag_ik_ga_mee}</button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </section>
+    );
+}
+
+function HoofdRepetitiesTab({ detail, performanceId, reload, lang, t }) {
     const [form, setForm] = useState({ rehearsal_id: '', date: '', start: '', end: '', note: '' });
     const [busy, setBusy] = useState(false);
     const rehearsals = detail.rehearsals || [];
@@ -653,6 +696,7 @@ function RepetitiesTab({ detail, performanceId, reload, lang, t }) {
                             <div key={p.id} className="p-4 flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                     <div className="font-semibold">{fmtDT(p.starts_at, lang)}{p.ends_at ? ` – ${fmtTime(p.ends_at, lang)}` : ''}</div>
+                                    {p.meelopers?.length > 0 && <div className="text-sm text-green-700">{t.ag_gaan_mee}: {p.meelopers.join(', ')}</div>}
                                     {p.note && <div className="text-sm text-gray-500">{p.note}</div>}
                                 </div>
                                 <button onClick={() => remove(p.id)} className="text-xs text-gray-400 hover:text-red-600 whitespace-nowrap">{t.delete}</button>

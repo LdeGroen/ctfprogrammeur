@@ -50,6 +50,8 @@ export const api = {
         body: JSON.stringify(data),
     }),
     deleteProposal: (id) => request(`/api/programmer/public/proposals/${id}`, { method: 'DELETE' }),
+    // Meeloopcoach: meegaan met een bezoek van de hoofdbegeleider (of niet).
+    meelopen: (id, mee) => request(`/api/programmer/public/proposals/${id}/mee`, { method: 'POST', body: JSON.stringify({ mee }) }),
     // Google Agenda-koppeling.
     calendarStatus: () => request('/api/programmer/public/calendar/status'),
     calendarConnect: () => request(`/api/programmer/public/calendar/connect?return_to=${encodeURIComponent(window.location.origin + window.location.pathname)}`),

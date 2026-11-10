@@ -13,6 +13,10 @@ import { api } from './api';
  * Bovenaan zet je makers aan en uit (onthouden in localStorage). De gegevens
  * komen uit hetzelfde overzicht als de lijst (`api.overview()`), dus er is
  * geen apart eindpunt.
+ *
+ * Meeloopcoach (rol 'mee', 10-11-2026): bij zo'n maker plan je niets zelf.
+ * In de plannen-stand staan dan de bezoeken van de hoofdbegeleider, en vink je
+ * aan dat je meegaat; de geplande stand toont waar je mee naartoe gaat.
  */
 
 // Voluit geschreven, anders haalt Tailwind ze niet in de CSS.
@@ -47,7 +51,7 @@ function leesUit() {
     try { return new Set(JSON.parse(localStorage.getItem(UIT_SLEUTEL) || '[]')); } catch { return new Set(); }
 }
 
-export default function Agenda({ items, loading, onReload, onOpenMaker, lang, t }) {
+export default function Agenda({ items, loading, onReload, onOpenMaker, alleenMeelopen, lang, t }) {
     const [stand, setStand] = useState('plannen');
     const [uit, setUit] = useState(leesUit);
     const [week, setWeek] = useState(null);
@@ -64,15 +68,24 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, lang, t 
         const gezien = new Set();
         (items || []).forEach((m) => {
             const pid = String(m.performance_id);
-            const maker = { id: pid, titel: m.title, gezelschap: m.company, kleur: KLEUREN[ms.length % KLEUREN.length] };
+            const maker = { id: pid, titel: m.title, gezelschap: m.company, mee: m.rol === 'mee', kleur: KLEUREN[ms.length % KLEUREN.length] };
             ms.push(maker);
+            if (maker.mee) {
+                // Meelopen: de bezoeken van de hoofdbegeleider zijn de blokjes.
+                (m.proposals || []).filter((p) => p.status !== 'rejected' && p.starts_at).forEach((p) => {
+                    const b = { soort: 'meeloop', id: p.id, maker, start: new Date(p.starts_at), eind: p.ends_at ? new Date(p.ends_at) : null, note: p.note, programmer: p.programmer, ikMee: !!p.ik_mee, meelopers: p.meelopers || [] };
+                    reps.push(b);
+                    if (b.ikMee) bzs.push(b);
+                });
+                return;
+            }
             (m.rehearsals || []).forEach((r) => {
                 if (gezien.has(r.id) || !r.starts_at) return;
                 gezien.add(r.id);
                 reps.push({ soort: 'repetitie', id: r.id, maker, start: new Date(r.starts_at), eind: r.ends_at ? new Date(r.ends_at) : null, note: r.note });
             });
             (m.proposals || []).filter((p) => p.status !== 'rejected' && p.starts_at).forEach((p) => {
-                bzs.push({ soort: 'bezoek', id: p.id, rehearsalId: p.rehearsal_id, maker, start: new Date(p.starts_at), eind: p.ends_at ? new Date(p.ends_at) : null, note: p.note });
+                bzs.push({ soort: 'bezoek', id: p.id, rehearsalId: p.rehearsal_id, maker, start: new Date(p.starts_at), eind: p.ends_at ? new Date(p.ends_at) : null, note: p.note, meelopers: p.meelopers || [] });
             });
         });
         return { makers: ms, repetities: reps, bezoeken: bzs };
@@ -140,7 +153,7 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, lang, t 
                 {['plannen', 'gepland'].map((s) => (
                     <button key={s} onClick={() => setStand(s)}
                         className={`flex-1 px-4 py-2 text-sm font-medium ${stand === s ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-                        {s === 'plannen' ? t.ag_plannen : t.ag_gepland}
+                        {s === 'plannen' ? (alleenMeelopen ? t.ag_mee_plannen : t.ag_plannen) : (alleenMeelopen ? t.ag_mee_gepland : t.ag_gepland)}
                         <span className="ml-1 opacity-75">({(s === 'plannen' ? repetities : bezoeken).length})</span>
                     </button>
                 ))}
@@ -168,8 +181,8 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, lang, t 
                         );
                     })}
                 </div>
-                {stand === 'plannen' && repetities.length === 0 && <p className="text-xs text-gray-500 mt-2">{t.ag_geen_repetities}</p>}
-                {stand === 'gepland' && bezoeken.length === 0 && <p className="text-xs text-gray-500 mt-2">{t.ag_geen_bezoeken}</p>}
+                {stand === 'plannen' && repetities.length === 0 && <p className="text-xs text-gray-500 mt-2">{alleenMeelopen ? t.ag_mee_geen : t.ag_geen_repetities}</p>}
+                {stand === 'gepland' && bezoeken.length === 0 && <p className="text-xs text-gray-500 mt-2">{alleenMeelopen ? t.ag_mee_geen_gepland : t.ag_geen_bezoeken}</p>}
             </div>
 
             {/* Weeknavigatie */}
@@ -217,7 +230,7 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, lang, t 
             )}
 
             {gekozen && (
-                <BlokDialoog item={gekozen} bezoek={gekozen.soort === 'repetitie' ? bezoekBij.get(gekozen.id) : null}
+                <BlokDialoog item={gekozen} bezoek={gekozen.soort === 'repetitie' ? bezoekBij.get(gekozen.id) : null} lopers={gekozen.meelopers || []}
                     onSluit={() => setGekozen(null)} onKlaar={() => { setGekozen(null); onReload(); }}
                     onOpenMaker={onOpenMaker} lang={lang} t={t} />
             )}
@@ -247,13 +260,16 @@ function DagKolom({ dag, items, vanUur, uren, bezoekBij, stand, onKies, lang }) 
             {geplaatst.map(({ e, eind, baan }) => {
                 const top = Math.max(0, ((e.start - dagStart) / 60000) * (UUR_PX / 60));
                 const hoogte = Math.max(22, Math.min(maxPx - top, ((eind - e.start) / 60000) * (UUR_PX / 60)));
-                const bezoek = stand === 'plannen' ? bezoekBij.get(e.id) : null;
+                const bezoek = stand === 'plannen' ? (e.soort === 'meeloop' ? (e.ikMee ? e : null) : bezoekBij.get(e.id)) : null;
+                const met = (e.soort === 'repetitie' ? bezoek?.meelopers : e.meelopers) || [];
                 return (
                     <button key={`${e.soort}-${e.id}`} onClick={() => onKies(e)}
                         className={`absolute rounded-md border-l-4 px-1.5 py-0.5 text-left overflow-hidden text-[11px] leading-tight shadow-sm hover:brightness-95 ${e.maker.kleur.blok} ${bezoek ? 'ring-2 ring-green-600' : ''}`}
                         style={{ top, height: hoogte, left: `calc(${(baan / aantalBanen) * 100}% + 2px)`, width: `calc(${100 / aantalBanen}% - 4px)` }}>
                         <div className="font-semibold truncate">{bezoek && '✓ '}{e.maker.titel}</div>
                         <div className="truncate opacity-80">{hhmm(e.start)}{e.eind ? `–${hhmm(e.eind)}` : ''}</div>
+                        {e.soort === 'meeloop' && e.programmer && <div className="truncate opacity-80">{e.programmer}</div>}
+                        {e.soort !== 'meeloop' && met.length > 0 && <div className="truncate opacity-80">+ {met.join(', ')}</div>}
                     </button>
                 );
             })}
@@ -261,7 +277,7 @@ function DagKolom({ dag, items, vanUur, uren, bezoekBij, stand, onKies, lang }) 
     );
 }
 
-function BlokDialoog({ item, bezoek, onSluit, onKlaar, onOpenMaker, lang, t }) {
+function BlokDialoog({ item, bezoek, lopers, onSluit, onKlaar, onOpenMaker, lang, t }) {
     const [form, setForm] = useState(() => ({
         start: hhmm(item.start),
         eind: item.eind ? hhmm(item.eind) : '',
@@ -294,6 +310,11 @@ function BlokDialoog({ item, bezoek, onSluit, onKlaar, onOpenMaker, lang, t }) {
         } catch (err) { setFout(err.message || t.ag_mislukt); setBezig(false); }
     };
 
+    const meegaan = async (mee) => {
+        setBezig(true); setFout('');
+        try { await api.meelopen(item.id, mee); onKlaar(); } catch (err) { setFout(err.message || t.ag_mislukt); setBezig(false); }
+    };
+
     const weg = async (id) => {
         if (!window.confirm(t.proposal_delete_confirm)) return;
         setBezig(true);
@@ -305,7 +326,7 @@ function BlokDialoog({ item, bezoek, onSluit, onKlaar, onOpenMaker, lang, t }) {
             <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl p-5 space-y-4" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{item.soort === 'repetitie' ? t.ag_repetitie : t.ag_bezoek}</div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{item.soort === 'repetitie' ? t.ag_repetitie : item.soort === 'meeloop' ? t.ag_bezoek_van.replace('{naam}', item.programmer || t.ag_begeleider) : t.ag_bezoek}</div>
                         <div className="font-bold text-lg truncate">{item.maker.titel}</div>
                         {item.maker.gezelschap && <div className="text-sm text-gray-500 truncate">{item.maker.gezelschap}</div>}
                     </div>
@@ -316,9 +337,30 @@ function BlokDialoog({ item, bezoek, onSluit, onKlaar, onOpenMaker, lang, t }) {
                     {item.note && <div className="text-gray-500 mt-1">{item.note}</div>}
                 </div>
 
+                {item.soort === 'meeloop' && (
+                    <div className="space-y-2">
+                        {(item.meelopers || []).length > 0 && <p className="text-sm text-gray-600">{t.ag_gaan_mee}: {item.meelopers.join(', ')}</p>}
+                        {item.ikMee ? (
+                            <>
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">✓ {t.ag_jij_gaat_mee}</div>
+                                <button onClick={() => meegaan(false)} disabled={bezig} className="w-full border border-red-300 text-red-700 py-2 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50">{t.ag_toch_niet_mee}</button>
+                            </>
+                        ) : (
+                            <button onClick={() => meegaan(true)} disabled={bezig} className="w-full bg-ctf-primary text-white py-2.5 rounded-lg font-semibold hover:bg-ctf-primary/90 disabled:opacity-50">
+                                {bezig ? t.loading : t.ag_ik_ga_mee}
+                            </button>
+                        )}
+                        <p className="text-xs text-gray-500">{t.ag_mee_uitleg}</p>
+                    </div>
+                )}
+
+                {item.soort !== 'meeloop' && lopers.length > 0 && (
+                    <p className="text-sm text-gray-600">{t.ag_gaan_mee}: {lopers.join(', ')}</p>
+                )}
+
                 {item.soort === 'repetitie' && bezoek && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm flex items-center justify-between gap-3">
-                        <span className="text-green-800">✓ {t.ag_al_ingepland} {tijd(bezoek.start)}{bezoek.eind ? `–${tijd(bezoek.eind)}` : ''}</span>
+                        <span className="text-green-800">✓ {t.ag_al_ingepland} {tijd(bezoek.start)}{bezoek.eind ? `–${tijd(bezoek.eind)}` : ''}{bezoek.meelopers?.length ? ` (${t.ag_met} ${bezoek.meelopers.join(', ')})` : ''}</span>
                         <button onClick={() => weg(bezoek.id)} disabled={bezig} className="text-xs text-red-600 hover:underline disabled:opacity-50">{t.delete}</button>
                     </div>
                 )}

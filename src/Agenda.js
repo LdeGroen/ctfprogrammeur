@@ -35,6 +35,8 @@ const KLEUREN = [
 
 const UUR_PX = 48;
 const UIT_SLEUTEL = 'ctfprogrammeur_agenda_uit';
+const WEERGAVE_SLEUTEL = 'ctfprogrammeur_agenda_weergave';
+const MAX_IN_CEL = 4;
 
 const pad = (n) => String(n).padStart(2, '0');
 const dagSleutel = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -45,6 +47,8 @@ function maandag(d) {
     return x;
 }
 const plusDagen = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const eersteVanMaand = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+const plusMaanden = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
 const locale = (lang) => (lang === 'en' ? 'en-GB' : 'nl-NL');
 
 function leesUit() {
@@ -55,6 +59,10 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, alleenMe
     const [stand, setStand] = useState('plannen');
     const [uit, setUit] = useState(leesUit);
     const [week, setWeek] = useState(null);
+    // Week of maand (10-11-2026), onthouden per browser.
+    const [weergave, setWeergave] = useState(() => { try { return localStorage.getItem(WEERGAVE_SLEUTEL) || 'week'; } catch { return 'week'; } });
+    const [maand, setMaand] = useState(null);
+    useEffect(() => { try { localStorage.setItem(WEERGAVE_SLEUTEL, weergave); } catch { /* geen opslag */ } }, [weergave]);
     const [gekozen, setGekozen] = useState(null);
 
     useEffect(() => {
@@ -117,14 +125,33 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, alleenMe
         return maandag(komend[0]?.start || nu);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [stand, items]);
-    useEffect(() => { setWeek(null); }, [stand]);
+    useEffect(() => { setWeek(null); setMaand(null); }, [stand]);
     const huidigeWeek = week || startWeek;
     const dagen = [...Array(7)].map((_, i) => plusDagen(huidigeWeek, i));
     const weekEind = plusDagen(huidigeWeek, 7);
     const inWeek = zichtbaar.filter((e) => e.start >= huidigeWeek && e.start < weekEind);
 
-    const volgende = zichtbaar.filter((e) => e.start >= weekEind).sort((a, b) => a.start - b.start)[0];
-    const vorige = zichtbaar.filter((e) => e.start < huidigeWeek).sort((a, b) => b.start - a.start)[0];
+    // Maand: de maand waar de week in valt (op donderdag, zoals een weeknummer),
+    // tenzij er al met de pijltjes een maand is gekozen.
+    const huidigeMaand = maand || eersteVanMaand(plusDagen(huidigeWeek, 3));
+    const maandEind = plusMaanden(huidigeMaand, 1);
+    const isMaand = weergave === 'maand';
+    const vanaf = isMaand ? huidigeMaand : huidigeWeek;
+    const tot = isMaand ? maandEind : weekEind;
+
+    const volgende = zichtbaar.filter((e) => e.start >= tot).sort((a, b) => a.start - b.start)[0];
+    const vorige = zichtbaar.filter((e) => e.start < vanaf).sort((a, b) => b.start - a.start)[0];
+    const ga = (datum) => { if (isMaand) setMaand(eersteVanMaand(datum)); else setWeek(maandag(datum)); };
+    const stap = (n) => { if (isMaand) setMaand(plusMaanden(huidigeMaand, n)); else setWeek(plusDagen(huidigeWeek, 7 * n)); };
+    const kiesWeergave = (w) => {
+        const nu = new Date();
+        if (w === 'week' && isMaand) setWeek(maandag(huidigeMaand <= nu && maandEind > nu ? nu : huidigeMaand));
+        if (w === 'maand' && !isMaand) setMaand(eersteVanMaand(plusDagen(huidigeWeek, 3)));
+        setWeergave(w);
+    };
+    const roosterStart = maandag(huidigeMaand);
+    const roosterEind = plusDagen(maandag(plusDagen(maandEind, -1)), 7);
+    const inMaand = zichtbaar.filter((e) => e.start >= roosterStart && e.start < roosterEind);
 
     // Uren: standaard 9-18, groter als er iets eerder of later is.
     let vanUur = 9, totUur = 18;
@@ -145,6 +172,7 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, alleenMe
 
     if (loading || items === null) return <div className="text-center text-gray-400 py-10">{t.loading}</div>;
 
+    const maandLabel = huidigeMaand.toLocaleDateString(locale(lang), { month: 'long', year: 'numeric' });
     const weekLabel = `${dagen[0].toLocaleDateString(locale(lang), { day: 'numeric', month: 'short' })} – ${dagen[6].toLocaleDateString(locale(lang), { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
     return (
@@ -185,19 +213,36 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, alleenMe
                 {stand === 'gepland' && bezoeken.length === 0 && <p className="text-xs text-gray-500 mt-2">{alleenMeelopen ? t.ag_mee_geen_gepland : t.ag_geen_bezoeken}</p>}
             </div>
 
-            {/* Weeknavigatie */}
+            {/* Navigatie */}
             <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => setWeek(plusDagen(huidigeWeek, -7))} className="px-3 py-1.5 bg-white border rounded-lg text-sm hover:bg-gray-50" aria-label={t.ag_vorige_week}>←</button>
-                <button onClick={() => setWeek(plusDagen(huidigeWeek, 7))} className="px-3 py-1.5 bg-white border rounded-lg text-sm hover:bg-gray-50" aria-label={t.ag_volgende_week}>→</button>
-                <button onClick={() => setWeek(vandaag)} className="px-3 py-1.5 bg-white border rounded-lg text-sm hover:bg-gray-50">{t.ag_vandaag}</button>
-                <span className="font-semibold text-gray-800 text-sm">{weekLabel}</span>
+                <div className="flex rounded-lg border bg-white overflow-hidden text-sm">
+                    {['week', 'maand'].map((w) => (
+                        <button key={w} onClick={() => kiesWeergave(w)}
+                            className={`px-3 py-1.5 ${weergave === w ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                            {w === 'week' ? t.ag_week : t.ag_maand}
+                        </button>
+                    ))}
+                </div>
+                <button onClick={() => stap(-1)} className="px-3 py-1.5 bg-white border rounded-lg text-sm hover:bg-gray-50" aria-label={isMaand ? t.ag_vorige_maand : t.ag_vorige_week}>←</button>
+                <button onClick={() => stap(1)} className="px-3 py-1.5 bg-white border rounded-lg text-sm hover:bg-gray-50" aria-label={isMaand ? t.ag_volgende_maand : t.ag_volgende_week}>→</button>
+                <button onClick={() => (isMaand ? setMaand(eersteVanMaand(new Date())) : setWeek(vandaag))} className="px-3 py-1.5 bg-white border rounded-lg text-sm hover:bg-gray-50">{isMaand ? t.ag_deze_maand : t.ag_vandaag}</button>
+                <span className="font-semibold text-gray-800 text-sm first-letter:uppercase">{isMaand ? maandLabel : weekLabel}</span>
                 <span className="flex-1" />
-                {vorige && <button onClick={() => setWeek(maandag(vorige.start))} className="text-xs text-ctf-primary hover:underline">← {t.ag_vorige_met}</button>}
-                {volgende && <button onClick={() => setWeek(maandag(volgende.start))} className="text-xs text-ctf-primary hover:underline">{t.ag_volgende_met} →</button>}
+                {vorige && <button onClick={() => ga(vorige.start)} className="text-xs text-ctf-primary hover:underline">← {t.ag_vorige_met}</button>}
+                {volgende && <button onClick={() => ga(volgende.start)} className="text-xs text-ctf-primary hover:underline">{t.ag_volgende_met} →</button>}
                 <button onClick={onReload} className="text-xs text-ctf-primary hover:underline">↻ {t.overview_refresh}</button>
             </div>
 
+            {isMaand && (
+                <MaandRooster maand={huidigeMaand} items={inMaand} bezoekBij={bezoekBij} stand={stand} onKies={setGekozen}
+                    onDag={(d) => { setWeek(maandag(d)); setWeergave('week'); }} lang={lang} t={t} />
+            )}
+            {isMaand && inMaand.length === 0 && zichtbaar.length > 0 && (
+                <p className="text-sm text-gray-500 text-center">{t.ag_maand_leeg}</p>
+            )}
+
             {/* Rooster */}
+            {!isMaand && <>
             <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
                 <div className="min-w-[720px]">
                     <div className="grid border-b" style={{ gridTemplateColumns: '3rem repeat(7, minmax(0, 1fr))' }}>
@@ -228,12 +273,71 @@ export default function Agenda({ items, loading, onReload, onOpenMaker, alleenMe
             {inWeek.length === 0 && zichtbaar.length > 0 && (
                 <p className="text-sm text-gray-500 text-center">{t.ag_week_leeg}</p>
             )}
+            </>}
 
             {gekozen && (
                 <BlokDialoog item={gekozen} bezoek={gekozen.soort === 'repetitie' ? bezoekBij.get(gekozen.id) : null} lopers={gekozen.meelopers || []}
                     onSluit={() => setGekozen(null)} onKlaar={() => { setGekozen(null); onReload(); }}
                     onOpenMaker={onOpenMaker} lang={lang} t={t} />
             )}
+        </div>
+    );
+}
+
+/**
+ * Maandoverzicht: per dag de blokjes als regeltjes (tijd + maker). Te veel op
+ * een dag? Dan "+n"; klikken daarop of op het dagnummer opent die week.
+ */
+function MaandRooster({ maand, items, bezoekBij, stand, onKies, onDag, lang, t }) {
+    const start = maandag(maand);
+    const laatste = plusDagen(plusMaanden(maand, 1), -1);
+    const weken = Math.round((maandag(laatste) - start) / (7 * 86400000)) + 1;
+    const dagen = [...Array(weken * 7)].map((_, i) => plusDagen(start, i));
+    const perDag = new Map();
+    [...items].sort((a, b) => a.start - b.start).forEach((e) => {
+        const k = dagSleutel(e.start);
+        if (!perDag.has(k)) perDag.set(k, []);
+        perDag.get(k).push(e);
+    });
+    const vandaagK = dagSleutel(new Date());
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+            <div className="min-w-[720px]">
+                <div className="grid grid-cols-7 border-b">
+                    {dagen.slice(0, 7).map((d) => (
+                        <div key={d.getDay()} className="text-center py-2 text-xs uppercase text-gray-600">{d.toLocaleDateString(locale(lang), { weekday: 'short' })}</div>
+                    ))}
+                </div>
+                <div className="grid grid-cols-7">
+                    {dagen.map((d) => {
+                        const k = dagSleutel(d);
+                        const lijst = perDag.get(k) || [];
+                        const buiten = d.getMonth() !== maand.getMonth();
+                        return (
+                            <div key={k} className={`min-h-[104px] border-b border-r p-1 ${buiten ? 'bg-gray-50' : ''}`}>
+                                <button onClick={() => onDag(d)} className={`text-xs mb-0.5 px-1 rounded hover:bg-gray-100 ${k === vandaagK ? 'text-ctf-primary font-bold' : buiten ? 'text-gray-400' : 'text-gray-700'}`}>
+                                    {d.getDate()}
+                                </button>
+                                <div className="space-y-0.5">
+                                    {lijst.slice(0, MAX_IN_CEL).map((e) => {
+                                        const vink = stand === 'plannen' && (e.soort === 'meeloop' ? e.ikMee : bezoekBij.has(e.id));
+                                        return (
+                                            <button key={`${e.soort}-${e.id}`} onClick={() => onKies(e)}
+                                                className={`w-full text-left text-[11px] leading-tight px-1 py-0.5 rounded border-l-4 truncate block ${e.maker.kleur.blok} ${vink ? 'ring-1 ring-green-600' : ''}`}>
+                                                {vink && '✓ '}<span className="opacity-75">{hhmm(e.start)}</span> {e.maker.titel}
+                                            </button>
+                                        );
+                                    })}
+                                    {lijst.length > MAX_IN_CEL && (
+                                        <button onClick={() => onDag(d)} className="text-[11px] text-ctf-primary hover:underline px-1">+{lijst.length - MAX_IN_CEL} {t.ag_meer}</button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
         </div>
     );
 }

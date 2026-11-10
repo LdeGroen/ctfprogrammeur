@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { api, clearStoredPincode, getStoredPincode, setStoredPincode } from './api';
 import { disablePush, enablePush, getPushState } from './push';
 import { UI } from './i18n';
+import Agenda from './Agenda';
 
 const TABS = ['tekst', 'repetities', 'contact'];
 
@@ -71,7 +72,7 @@ export default function App() {
         try { const d = await api.overview(); setOverview(d.makers || []); } catch (e) { setError(e.message || 'Laden mislukt'); } finally { setLoadingOverview(false); }
     }, []);
 
-    useEffect(() => { if (loggedIn && page === 'overview' && overview === null) loadOverview(); }, [loggedIn, page, overview, loadOverview]);
+    useEffect(() => { if (loggedIn && (page === 'overview' || page === 'agenda') && overview === null) loadOverview(); }, [loggedIn, page, overview, loadOverview]);
 
     const handleLogin = async (name, pincode) => {
         setError('');
@@ -124,14 +125,18 @@ export default function App() {
             {loading ? (
                 <div className="text-center text-gray-500 py-12">{t.loading}</div>
             ) : !selectedId ? (
-                <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6">
+                <main className={`flex-1 ${page === 'agenda' ? 'max-w-6xl' : 'max-w-4xl'} w-full mx-auto px-4 py-6`}>
                     <div className="flex rounded-lg bg-white border shadow-sm overflow-hidden mb-5">
                         <button onClick={() => setPage('makers')} className={`flex-1 px-4 py-2.5 text-sm font-medium ${page === 'makers' ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t.page_makers}</button>
                         <button onClick={() => setPage('overview')} className={`flex-1 px-4 py-2.5 text-sm font-medium ${page === 'overview' ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t.page_overview}</button>
+                        <button onClick={() => setPage('agenda')} className={`flex-1 px-4 py-2.5 text-sm font-medium ${page === 'agenda' ? 'bg-ctf-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t.page_agenda}</button>
                     </div>
                     <JaarTabs jaren={jaren} actief={actiefJaar} onKies={setJaar} t={t} />
                     {page === 'makers'
                         ? <MakerOverview makers={jaarMakers} onSelect={selectMaker} t={t} />
+                        : page === 'agenda'
+                        ? <Agenda items={overview && overview.filter(vanJaar)} loading={loadingOverview} onReload={loadOverview}
+                            onOpenMaker={(id) => { selectMaker(id); setTab('repetities'); }} lang={lang} t={t} />
                         : <div className="space-y-4">
                             <CalendarPanel lang={lang} t={t} />
                             <RehearsalOverview items={overview && overview.filter(vanJaar)} loading={loadingOverview} onSelect={selectMaker} onReload={loadOverview} lang={lang} t={t} />
@@ -175,6 +180,11 @@ export default function App() {
                                 className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-50 text-gray-700 flex items-center gap-2">
                                 <span className="text-ctf-primary">📋</span>
                                 <span className="font-medium text-sm">{t.page_overview}</span>
+                            </button>
+                            <button onClick={() => { setSelectedId(null); setPage('agenda'); setDrawer(false); }}
+                                className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-50 text-gray-700 flex items-center gap-2">
+                                <span className="text-ctf-primary">📅</span>
+                                <span className="font-medium text-sm">{t.page_agenda}</span>
                             </button>
                             <button onClick={() => { setSelectedId(null); setPage('makers'); setDrawer(false); }}
                                 className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-50 text-gray-700 flex items-center gap-2">

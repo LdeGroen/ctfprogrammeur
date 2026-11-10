@@ -294,8 +294,9 @@ function RehearsalOverview({ items, loading, onSelect, onReload, lang, t }) {
     if (loading || items === null) return <div className="text-center text-gray-400 py-10">{t.loading}</div>;
     if (items.length === 0) return <EmptyState text={t.no_makers} />;
 
-    // Sorteer: makers die aandacht nodig hebben (niets ingevoerd, of niet gedeeld) bovenaan.
-    const rank = (m) => (!m.has_rehearsals ? 0 : !m.released ? 1 : 2);
+    // Sorteer: makers zonder repetities bovenaan. Vrijgeven bestaat sinds
+    // 10-11-2026 niet meer; wat een maker invoert staat er meteen.
+    const rank = (m) => (!m.has_rehearsals ? 0 : 2);
     const sorted = [...items].sort((a, b) => rank(a) - rank(b) || (a.title || '').localeCompare(b.title || ''));
 
     const needAttention = sorted.filter(m => rank(m) < 2).length;
@@ -391,13 +392,12 @@ function CalendarPanel({ lang, t }) {
 }
 
 function OverviewCard({ m, onSelect, lang, t }) {
-    // Status van de maker: niets ingevoerd → ingevoerd-maar-niet-gedeeld → gedeeld.
+    // Status van de maker: niets ingevoerd of wel.
     let badge, badgeClass;
     if (!m.has_rehearsals) { badge = t.st_none; badgeClass = 'text-gray-600 bg-gray-100'; }
-    else if (!m.released) { badge = t.st_entered_not_shared; badgeClass = 'text-amber-700 bg-amber-50'; }
     else { badge = t.st_shared; badgeClass = 'text-green-700 bg-green-50'; }
 
-    const pendingProposals = (m.proposals || []).filter(p => p.status === 'pending').length;
+    const bezoeken = (m.proposals || []).filter(p => p.status !== 'rejected');
 
     return (
         <div className="bg-white rounded-xl shadow-sm p-4">
@@ -409,37 +409,29 @@ function OverviewCard({ m, onSelect, lang, t }) {
                 <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${badgeClass}`}>{badge}</span>
             </div>
 
-            {/* Ingeplande (vrijgegeven) repetities */}
-            {m.released && m.rehearsals?.length > 0 && (
+            {/* Repetities van de maker */}
+            {m.rehearsals?.length > 0 && (
                 <div className="mt-3 border-t pt-3 space-y-1">
                     {m.rehearsals.map(r => (
                         <div key={r.id} className="text-sm text-gray-700 flex items-center gap-2">
                             <span className="text-gray-400">•</span>
                             <span>{fmtDT(r.starts_at, lang)}{r.ends_at ? ` – ${fmtTime(r.ends_at, lang)}` : ''}</span>
-                            {r.in_cafe && <span className="text-amber-700 text-xs">🏠 {t.in_cafe}</span>}
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* Bezoekvoorstellen met status */}
-            {m.proposals?.length > 0 && (
+            {/* Ingeplande bezoeken */}
+            {bezoeken.length > 0 && (
                 <div className="mt-3 border-t pt-3 space-y-1">
                     <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t.proposals_title}</div>
-                    {m.proposals.map(p => {
-                        const cls = p.status === 'accepted' ? 'text-green-700 bg-green-50' : p.status === 'rejected' ? 'text-red-700 bg-red-50' : 'text-amber-700 bg-amber-50';
-                        const lbl = p.status === 'accepted' ? t.status_accepted : p.status === 'rejected' ? t.status_rejected : t.status_pending;
-                        return (
-                            <div key={p.id} className="text-sm flex items-center justify-between gap-2">
-                                <span className="text-gray-700 min-w-0 truncate">{fmtDT(p.starts_at, lang)}{p.ends_at ? ` – ${fmtTime(p.ends_at, lang)}` : ''}</span>
-                                <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>{lbl}</span>
-                            </div>
-                        );
-                    })}
+                    {bezoeken.map(p => (
+                        <div key={p.id} className="text-sm text-gray-700 truncate">{fmtDT(p.starts_at, lang)}{p.ends_at ? ` – ${fmtTime(p.ends_at, lang)}` : ''}</div>
+                    ))}
                 </div>
             )}
 
-            {pendingProposals === 0 && m.released && (m.rehearsals?.length > 0) && (
+            {bezoeken.length === 0 && (m.rehearsals?.length > 0) && (
                 <button onClick={() => onSelect(m.performance_id)} className="mt-3 text-sm text-ctf-primary hover:underline">{t.overview_propose} →</button>
             )}
         </div>
@@ -574,7 +566,7 @@ function RepetitiesTab({ detail, performanceId, reload, lang, t }) {
     const [form, setForm] = useState({ rehearsal_id: '', date: '', start: '', end: '', note: '' });
     const [busy, setBusy] = useState(false);
     const rehearsals = detail.rehearsals || [];
-    const proposals = detail.proposals || [];
+    const proposals = (detail.proposals || []).filter(p => p.status !== 'rejected');
 
     const pickRehearsal = (r) => {
         if (r && r.starts_at) {
@@ -604,16 +596,12 @@ function RepetitiesTab({ detail, performanceId, reload, lang, t }) {
         try { await api.deleteProposal(id); reload?.(); } catch {}
     };
 
-    const statusLabel = (s) => s === 'accepted' ? t.status_accepted : s === 'rejected' ? t.status_rejected : t.status_pending;
-    const statusClass = (s) => s === 'accepted' ? 'text-green-700 bg-green-50' : s === 'rejected' ? 'text-red-700 bg-red-50' : 'text-amber-700 bg-amber-50';
 
     return (
         <div className="space-y-5">
             <section>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{t.rehearsals_title}</h3>
-                {!detail.rehearsals_released ? (
-                    <EmptyState text={t.rehearsals_not_released} />
-                ) : rehearsals.length === 0 ? (
+                {rehearsals.length === 0 ? (
                     <EmptyState text={t.rehearsals_none} />
                 ) : (
                     <div className="bg-white rounded-xl shadow-sm divide-y">
@@ -621,7 +609,6 @@ function RepetitiesTab({ detail, performanceId, reload, lang, t }) {
                             <div key={r.id} className="p-4 flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                     <div className="font-semibold">{fmtDT(r.starts_at, lang)}{r.ends_at ? ` – ${fmtTime(r.ends_at, lang)}` : ''}</div>
-                                    {r.in_cafe && <div className="text-sm text-amber-700">🏠 {t.in_cafe}</div>}
                                     {r.note && <div className="text-sm text-gray-500">{r.note}</div>}
                                 </div>
                                 <button onClick={() => pickRehearsal(r)} className="text-sm text-ctf-primary hover:underline whitespace-nowrap">{t.propose_here}</button>
@@ -658,10 +645,7 @@ function RepetitiesTab({ detail, performanceId, reload, lang, t }) {
                                     <div className="font-semibold">{fmtDT(p.starts_at, lang)}{p.ends_at ? ` – ${fmtTime(p.ends_at, lang)}` : ''}</div>
                                     {p.note && <div className="text-sm text-gray-500">{p.note}</div>}
                                 </div>
-                                <div className="flex items-center gap-2 whitespace-nowrap">
-                                    <span className={`text-xs px-2 py-1 rounded-full ${statusClass(p.status)}`}>{statusLabel(p.status)}</span>
-                                    {p.status === 'pending' && <button onClick={() => remove(p.id)} className="text-xs text-gray-400 hover:text-red-600">{t.delete}</button>}
-                                </div>
+                                <button onClick={() => remove(p.id)} className="text-xs text-gray-400 hover:text-red-600 whitespace-nowrap">{t.delete}</button>
                             </div>
                         ))}
                     </div>

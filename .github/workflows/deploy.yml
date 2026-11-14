@@ -19,17 +19,17 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      # Het vangnet dat react-scripts eerst in de build meebracht: Vite lint
+      # niet, dus een tikfout in een variabelenaam (no-undef) stopt hier.
+      - name: Lint
+        run: npm run lint
+
+      # Vite (sinds 14-11-2026). Source maps staan uit in vite.config.js.
       - name: Build production bundle
         run: npm run build
-        env:
-          CI: false
-          # De source map werd publiek meegeleverd: de volledige leesbare
-          # broncode van een intern systeem, zonder inloggen op te halen.
-          # Scheelt bovendien ongeveer een derde van de bouwtijd.
-          GENERATE_SOURCEMAP: false
 
       # Bewust géén "if: always()": faalt de build, dan mag deze stap niet
-      # draaien. react-scripts leegt build/ al vóór het compileren, dus na een
+      # draaien. De build leegt build/ al vóór het compileren, dus na een
       # mislukte build zou rsync --delete de live site vervangen door een lege
       # pagina. Stond hier eerst wél (erfenis van de oude Plesk-stap).
       - name: Ook naar de nieuwe server (rsync over SSH)

@@ -3,6 +3,8 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # Alleen documentatie gewijzigd? Dan geen bouw en uitrol (audit INF-08).
+    paths-ignore: ['**.md', 'docs/**', '.github/dependabot.yml']
   workflow_dispatch:
 
 # Bouwen en uitrollen staan centraal in ctf-ui (hard falen bij een ontbrekend

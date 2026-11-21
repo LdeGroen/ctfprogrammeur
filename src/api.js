@@ -50,6 +50,8 @@ export const api = {
     bundle: () => request('/api/programmer/public/bundle'),
     overview: () => request('/api/programmer/public/overview'),
     maker: (performanceId) => request(`/api/programmer/public/maker/${performanceId}`),
+    // Link naar de artiestenomgeving van deze maker in de kijkmodus (alleen lezen).
+    kijklink: (performanceId) => request(`/api/programmer/public/maker/${performanceId}/kijklink`, { method: 'POST' }),
     saveTekst: (performanceId, programmeurstekst) => request(`/api/programmer/public/maker/${performanceId}/tekst`, {
         method: 'PUT',
         body: JSON.stringify({ programmeurstekst }),

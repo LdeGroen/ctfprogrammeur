@@ -13,6 +13,10 @@ export const UI = {
 
         maker: 'Maker',
         switch_maker: 'wissel',
+        // Kijkmodus van de artiestenomgeving (21-11-2026).
+        kijk_knop: 'Bekijk hun artiestenomgeving',
+        kijk_uitleg: 'Zie wat dit gezelschap op artiest.cafetheaterfestival.nl ziet. Alleen kijken; de link werkt twee uur.',
+        kijk_mislukt: 'De artiestenomgeving kon niet worden geopend.',
         your_makers: 'Jouw makers',
         year_none: 'Zonder jaar',
         maker_pincode: 'Pincode van dit gezelschap',
@@ -155,6 +159,9 @@ export const UI = {
 
         maker: 'Maker',
         switch_maker: 'switch',
+        kijk_knop: 'View their artist page',
+        kijk_uitleg: 'See what this company sees on artiest.cafetheaterfestival.nl. View only; the link works for two hours.',
+        kijk_mislukt: 'Could not open the artist page.',
         your_makers: 'Your makers',
         year_none: 'No year',
         maker_pincode: 'PIN for this company',

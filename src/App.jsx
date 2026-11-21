@@ -162,6 +162,7 @@ export default function App() {
                             <span className="text-xs text-gray-400">{t.switch_maker}</span>
                         </button>
                         {selectedMaker?.company && <span className="text-sm text-gray-500">{selectedMaker.company}</span>}
+                        {detail?.company && <KijkKnop performanceId={selectedId} t={t} />}
                     </div>
 
                     <TabBar tabs={TABS} active={tab} onChange={setTab} t={t} />
@@ -222,6 +223,38 @@ const ZONDER_JAAR = 'zonder';
  * Tabjes per festivaljaar. Alleen als er meer dan één jaar is: met één jaar
  * is er niets te kiezen.
  */
+/**
+ * Kijkmodus (21-11-2026): de artiestenomgeving van deze maker zoals het
+ * gezelschap hem ziet, in een nieuw tabblad. De backend maakt een kijklink
+ * die twee uur werkt en alleen lezen toestaat.
+ *
+ * Het venster gaat meteen bij de klik open en krijgt pas daarna zijn adres:
+ * een window.open na een await houden browsers tegen als pop-up.
+ */
+function KijkKnop({ performanceId, t }) {
+    const [bezig, setBezig] = useState(false);
+    const open = async () => {
+        const venster = window.open('', '_blank');
+        setBezig(true);
+        try {
+            const { url } = await api.kijklink(performanceId);
+            if (venster) venster.location.href = url;
+            else window.location.href = url;
+        } catch {
+            if (venster) venster.close();
+            window.alert(t.kijk_mislukt);
+        } finally {
+            setBezig(false);
+        }
+    };
+    return (
+        <button onClick={open} disabled={bezig} title={t.kijk_uitleg}
+            className="ml-auto text-sm text-ctf-primary bg-white border border-ctf-primary/30 rounded-lg px-3 py-2 shadow-sm hover:bg-ctf-primary/5 disabled:opacity-50 whitespace-nowrap">
+            👀 {t.kijk_knop}
+        </button>
+    );
+}
+
 function JaarTabs({ jaren, actief, onKies, t }) {
     if (jaren.length < 2) return null;
 

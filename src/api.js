@@ -12,6 +12,11 @@ export function clearStoredPincode() {
     try { sessionStorage.removeItem(PINCODE_KEY); } catch {}
 }
 
+// Event als de pincode niet meer geldt (401 met pincode, bijvoorbeeld na
+// het roteren in de Controlekamer). App luistert en gaat terug naar het
+// inlogscherm, in plaats van tabbladen leeg te laten (audit POR-10).
+export const PINCODE_WEG = 'ctf-pincode-weg';
+
 async function request(path, options = {}) {
     const headers = { Accept: 'application/json', ...(options.headers || {}) };
     const pin = getStoredPincode();
@@ -24,6 +29,10 @@ async function request(path, options = {}) {
     const ct = res.headers.get('content-type') || '';
     const body = ct.includes('application/json') ? await res.json() : await res.text();
     if (!res.ok) {
+        if (res.status === 401 && pin) {
+            clearStoredPincode();
+            window.dispatchEvent(new Event(PINCODE_WEG));
+        }
         const err = new Error(body?.message || `HTTP ${res.status}`);
         err.status = res.status;
         err.body = body;

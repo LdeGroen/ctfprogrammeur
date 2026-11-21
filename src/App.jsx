@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { api, clearStoredPincode, getStoredPincode, setStoredPincode } from './api';
+import { api, PINCODE_WEG, clearStoredPincode, getStoredPincode, setStoredPincode } from './api';
 import { disablePush, enablePush, getPushState } from './push';
 import { UI } from './i18n';
 import Agenda from './Agenda';
@@ -87,10 +87,21 @@ export default function App() {
         }
     };
 
-    const handleLogout = () => {
-        clearStoredPincode();
+    // Terug naar het inlogscherm; de pincode is dan al gewist.
+    const naarInloggen = () => {
         setLoggedIn(false); setProgrammer(null); setMakers([]); setSelectedId(null); setDetail(null); setOverview(null); setPage('makers');
     };
+    const handleLogout = () => {
+        // Het push-abonnement van dit apparaat opzeggen zolang de pincode nog
+        // geldt; anders blijft een uitgelogd apparaat meldingen krijgen
+        // (audit POR-10). Pas daarna de pincode wissen.
+        disablePush().catch(() => {}).finally(clearStoredPincode);
+        naarInloggen();
+    };
+    useEffect(() => {
+        window.addEventListener(PINCODE_WEG, naarInloggen);
+        return () => window.removeEventListener(PINCODE_WEG, naarInloggen);
+    }, []);
 
     const selectMaker = (id) => { setSelectedId(id); setTab('tekst'); setDrawer(false); };
 
@@ -356,7 +367,8 @@ function CalendarPanel({ lang, t }) {
     const disconnect = async () => {
         if (!window.confirm(t.cal_disconnect_confirm)) return;
         setBusy('disconnect');
-        try { await api.calendarDisconnect(); setStatus({ connected: false }); } catch {} finally { setBusy(''); }
+        try { await api.calendarDisconnect(); setStatus({ connected: false }); }
+        catch (e) { if (e.status !== 401) alert('Ontkoppelen mislukt: ' + (e.message || '')); } finally { setBusy(''); }
     };
 
     if (status === null) return null;
@@ -646,7 +658,8 @@ function HoofdRepetitiesTab({ detail, performanceId, reload, lang, t }) {
 
     const remove = async (id) => {
         if (!window.confirm(t.proposal_delete_confirm)) return;
-        try { await api.deleteProposal(id); reload?.(); } catch {}
+        try { await api.deleteProposal(id); reload?.(); }
+        catch (e) { if (e.status !== 401) alert('Verwijderen mislukt: ' + (e.message || '')); }
     };
 
 

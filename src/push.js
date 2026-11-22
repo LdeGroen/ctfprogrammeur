@@ -1,7 +1,7 @@
 // Web-push helpers voor de programmeur-omgeving: service worker registreren,
 // abonneren/afmelden en de subscription naar de backend sturen (met pincode-header).
 
-import { API_URL, getStoredPincode } from './api';
+import { API_URL, authHeaders } from './api';
 
 function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -49,7 +49,7 @@ export async function enablePush(vapidPublicKey, lang) {
 
     const res = await fetch(`${API_URL}/api/programmer/public/push/subscribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Programmer-Pincode': getStoredPincode() },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, contentEncoding: encoding, lang }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -63,7 +63,7 @@ export async function disablePush() {
         try {
             await fetch(`${API_URL}/api/programmer/public/push/unsubscribe`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Programmer-Pincode': getStoredPincode() },
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
                 body: JSON.stringify({ endpoint: sub.endpoint }),
             });
         } catch { /* negeer */ }

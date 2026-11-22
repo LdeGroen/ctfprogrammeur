@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { api, PINCODE_WEG, clearStoredPincode, getStoredPincode, setStoredPincode } from './api';
+import { api, PINCODE_WEG, isIngelogd, bewaarSessie, vergeetSessie } from './api';
 import { disablePush, enablePush, getPushState } from './push';
 import { UI } from './i18n';
 import Agenda from './Agenda';
@@ -8,7 +8,7 @@ const TABS = ['tekst', 'repetities', 'contact'];
 
 export default function App() {
     const [lang, setLang] = useState(() => localStorage.getItem('ctfprogrammeur_lang') || 'nl');
-    const [loggedIn, setLoggedIn] = useState(() => !!getStoredPincode());
+    const [loggedIn, setLoggedIn] = useState(() => isIngelogd());
     const [programmer, setProgrammer] = useState(null);
     const [makers, setMakers] = useState([]);
     const [vapid, setVapid] = useState(null);
@@ -52,7 +52,7 @@ export default function App() {
             setMakers(data.makers || []);
             setVapid(data.vapid_public_key || null);
         } catch (e) {
-            if (e.status === 401 || e.status === 403) { clearStoredPincode(); setLoggedIn(false); }
+            if (e.status === 401 || e.status === 403) { vergeetSessie(); setLoggedIn(false); }
             else setError(e.message || 'Onbekende fout');
         } finally { setLoading(false); }
     }, []);
@@ -77,11 +77,11 @@ export default function App() {
     const handleLogin = async (name, pincode) => {
         setError('');
         try {
-            setStoredPincode(pincode);
-            await api.login(name, pincode);
+            const r = await api.login(name, pincode);
+            bewaarSessie(r.sessie);
             setLoggedIn(true);
         } catch (e) {
-            clearStoredPincode();
+            vergeetSessie();
             setError(t.login_failed);
             throw e;
         }
@@ -95,7 +95,8 @@ export default function App() {
         // Het push-abonnement van dit apparaat opzeggen zolang de pincode nog
         // geldt; anders blijft een uitgelogd apparaat meldingen krijgen
         // (audit POR-10). Pas daarna de pincode wissen.
-        disablePush().catch(() => {}).finally(clearStoredPincode);
+        // Daarna het sessietoken bij de backend intrekken en pas dan vergeten.
+        disablePush().catch(() => {}).finally(() => api.logout().catch(() => {}).finally(vergeetSessie));
         naarInloggen();
     };
     useEffect(() => {

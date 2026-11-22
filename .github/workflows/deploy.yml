@@ -13,7 +13,7 @@ on:
 # schrijven (rrsync; audit INF-01).
 jobs:
   deploy:
-    uses: LdeGroen/ctf-ui/.github/workflows/deploy-site.yml@deploy-v3
+    uses: LdeGroen/ctf-ui/.github/workflows/deploy-site.yml@deploy-v4
     with:
       lint: true
       beperkte-sleutel: true

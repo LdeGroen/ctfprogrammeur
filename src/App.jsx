@@ -431,6 +431,18 @@ function CalendarPanel({ lang, t }) {
                 )}
             </div>
 
+            {status.connected && (status.overzicht === false ? (
+                <div className="mt-3 p-3 rounded-lg bg-amber-50 text-amber-900 text-sm flex flex-wrap items-center justify-between gap-3">
+                    <span className="min-w-0 flex-1">{t.cal_opnieuw}</span>
+                    <button onClick={connect} disabled={busy === 'connect'}
+                        className="whitespace-nowrap bg-ctf-primary text-white text-sm px-3 py-1.5 rounded font-medium hover:bg-ctf-primary/90 disabled:opacity-50">
+                        {busy === 'connect' ? t.loading : t.cal_opnieuw_knop}
+                    </button>
+                </div>
+            ) : (
+                <p className="mt-2 text-xs text-gray-500">{t.cal_waar}</p>
+            ))}
+
             {status.connected && (
                 <div className="mt-3 pt-3 border-t flex flex-wrap items-center justify-between gap-3">
                     <label className="flex items-center gap-2 text-sm cursor-pointer">

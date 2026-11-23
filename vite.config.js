@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { ctfServiceWorker } from 'ctf-ui/vite'
 
 // Van react-scripts naar Vite (14-11-2026), net als ctfcrm en ctfwebapp.
 //
@@ -15,7 +16,7 @@ const proxy = {
 }
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), ctfServiceWorker()],  // sw.js komt uit ctf-ui (audit POR-07)
   build: {
     outDir: 'build',   // dezelfde map als react-scripts, zodat de rsync-stap blijft kloppen
     sourcemap: false,  // anders is de broncode publiek op te halen
